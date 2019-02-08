@@ -1,7 +1,8 @@
 //We always have to include the library
-#include "LedControl.h"
+#include <LedControl.h>
 #include <Wire.h>
-#include "RTClib.h"
+#include <RTClib.h>
+#include <Bounce2.h>
 
 /*
  Now we need a LedControl to work with.
@@ -12,19 +13,17 @@
  We have only a single MAX72XX.
  */
 #define NUMBER_OF_DIGITS 4
+#define TEMP_TIMEOUT 15;
 #define BUTTON_HOUR_PIN 2
 #define BUTTON_MINUTE_PIN 3
 #define BUTTON_TEMP_BUTTON 4
 #define BUTTON_TIMER_BUTTON 5
-#define DEBOUNCE 50
-#define HOLD_TIME 2000
+#define DEBOUNCE 25
 
-
-//HARDWARE 
-int buttonState = 0;
-int lastButtonState = 0;
-int lastDebounceTime = 0;
-
+Bounce hourButton = Bounce();
+Bounce minuteButton = Bounce();
+Bounce tempButton = Bounce();
+Bounce timerButton = Bounce();
 
 //SOFTWARE
 
@@ -41,27 +40,40 @@ LedControl lc=LedControl(12,11,10,1);
 RTC_Millis rtc;
 
 int timeBuffer[4];
-
-boolean isValid = false;
+int tempBuffer[3];
 
 boolean blink = false;
 
-
-/* we always wait a bit between updates of the display */
-unsigned long delaytime=250;
+int second = 0;
+int timeOut = TEMP_TIMEOUT;
 
 void setup() {
   Serial.begin(9600);
 
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(BUTTON_HOUR_PIN, INPUT);
+
+  pinMode(BUTTON_HOUR_PIN, INPUT_PULLUP);
+  hourButton.attach(BUTTON_HOUR_PIN);
+  hourButton.interval(DEBOUNCE);
+
+  pinMode(BUTTON_MINUTE_PIN, INPUT_PULLUP);
+  minuteButton.attach(BUTTON_MINUTE_PIN);
+  minuteButton.interval(DEBOUNCE);
+
+  pinMode(BUTTON_TEMP_BUTTON, INPUT_PULLUP);
+  tempButton.attach(BUTTON_TEMP_BUTTON);
+  tempButton.interval(DEBOUNCE);
+
+  pinMode(BUTTON_TIMER_BUTTON, INPUT_PULLUP);
+  timerButton.attach(BUTTON_TIMER_BUTTON);
+  timerButton.interval(DEBOUNCE);
 
   lc.shutdown(0,false);
   lc.setIntensity(0,4);
   lc.clearDisplay(0);
 
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-  
+  second = rtc.now().second();
 
   parseTime();
 }
@@ -69,24 +81,7 @@ long preMillis = 0;
 void loop() {
   long p = millis();
 
-  int reading = digitalRead(BUTTON_HOUR_PIN);
-
-  
-  //Button PRESSED
-  if(reading != lastButtonState){
-    lastDebounceTime = p;
-  }
-  if((p - lastDebounceTime) > DEBOUNCE){
-    if(reading != buttonState){
-      buttonState = reading;
-
-      if(buttonState == HIGH){
-        Serial.println("Button pressed");
-      }
-    }
-  }
-  
-
+  readButtons();  
   if(p - preMillis >= 1000){
     preMillis = p;
     FUNC_ON_SECOND();
@@ -94,40 +89,58 @@ void loop() {
   
 }
 
-void FUNC_ON_50_MILLI(){
-  
-}
-
-void FUNC_ON_100_MILLI() {
-  
-}
-
-void FUNC_ON_250_MILLI() {
-  
-}
-
-void FUNC_ON_500_MILLI() {
-
-}
-
 void FUNC_ON_SECOND(){
   blinkTimeDot();
   updateDisplay();
   heartbeat();
   parseTime();
+  second++;
+  if(second > 60){
+    FUNC_ON_MINUTE();
+  }
 }
 
 void FUNC_ON_MINUTE() {
+  second = 0;
+}
+
+void readButtons(){
+  hourButton.update();
+
+  if(hourButton.fell()){
+    Serial.println("Button press");
+  }
+
+  minuteButton.update();
+
+  if(minuteButton.fell()){
+
+  }
+
+  timerButton.update();
+  
+  if(timerButton.fell()){
+
+  }
+
+  tempButton.update();
+
+  if(tempButton.fell()){
+    displayState = TEMP;
+  }
 }
 
 void updateDisplay(){
-  lc.clearDisplay(0);
   switch (displayState)
   {
     case TIME:
+      parseTime();
+      lc.clearDisplay(0);
       writeTime();
       break;
     case TEMP:
+      parseTemp();
+      lc.clearDisplay(0);
       writeTemp();
       break;
     case SET:
@@ -147,7 +160,16 @@ void writeTime() {
 }
 
 void writeTemp() {
+  lc.setDigit(0,0,tempBuffer[0], false);
+  lc.setDigit(0,1,tempBuffer[1], true);
+  lc.setDigit(0,2,tempBuffer[2], false);
+  lc.setChar(0,3,'C', true);
 
+  timeOut--;
+  if(timeOut == 0){
+    timeOut = TEMP_TIMEOUT;
+    displayState = TIME;
+  }
 }
 
 void writeSet() {
@@ -164,6 +186,12 @@ void parseTime(){
   timeBuffer[1] = (now.hour()) % 10;
   timeBuffer[2] = (now.minute()) / 10;
   timeBuffer[3] = (now.minute()) % 10;
+}
+
+void parseTemp() {
+  tempBuffer[0] = 1;
+  tempBuffer[1] = 9;
+  tempBuffer[2] = 6;
 }
 
 boolean beat = false;
