@@ -13,12 +13,15 @@
  We have only a single MAX72XX.
  */
 #define NUMBER_OF_DIGITS 4
+#define TEMP_CHAR 'f'
 #define TEMP_TIMEOUT 15;
 #define BUTTON_HOUR_PIN 2
 #define BUTTON_MINUTE_PIN 3
 #define BUTTON_TEMP_BUTTON 4
 #define BUTTON_TIMER_BUTTON 5
 #define DEBOUNCE 25
+
+char tempChar = TEMP_CHAR;
 
 Bounce hourButton = Bounce();
 Bounce minuteButton = Bounce();
@@ -31,9 +34,17 @@ enum DisplayState{
   TIME,
   TEMP,
   SET,
+  TIMER,
+};
+
+enum TimerState {
+  STOPPED,
+  PAUSED,
+  RUNNING,
 };
 
 DisplayState displayState = TIME;
+TimerState timerState = STOPPED;
  
 LedControl lc=LedControl(12,11,10,1);
 //RTC_DS3231 rtc;
@@ -41,11 +52,15 @@ RTC_Millis rtc;
 
 int timeBuffer[4];
 int tempBuffer[3];
+int timerBuffer[4];
 
 boolean blink = false;
 
 int second = 0;
 int timeOut = TEMP_TIMEOUT;
+
+DateTime timerStart = 0;
+boolean timerRunning = false;
 
 void setup() {
   Serial.begin(9600);
@@ -69,13 +84,11 @@ void setup() {
   timerButton.interval(DEBOUNCE);
 
   lc.shutdown(0,false);
-  lc.setIntensity(0,4);
+  lc.setIntensity(0,2);
   lc.clearDisplay(0);
 
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   second = rtc.now().second();
-
-  parseTime();
 }
 long preMillis = 0;
 void loop() {
@@ -93,7 +106,6 @@ void FUNC_ON_SECOND(){
   blinkTimeDot();
   updateDisplay();
   heartbeat();
-  parseTime();
   second++;
   if(second > 60){
     FUNC_ON_MINUTE();
@@ -118,9 +130,25 @@ void readButtons(){
   }
 
   timerButton.update();
-  
-  if(timerButton.fell()){
 
+  if(timerButton.fell()){
+    if(displayState == TIMER){
+
+      //PAUSE TIMER AND HOLD
+      if(timerState == RUNNING) {
+        timerState == PAUSED;
+      } 
+      else if (timerState == PAUSED) {
+        timerState = STOPPED;
+        displayState = TIME;
+      } 
+      else {
+        timerState = RUNNING;
+        timerStart = rtc.now(); 
+      }
+    } else {
+      displayState = TIMER;
+    }
   }
 
   tempButton.update();
@@ -145,6 +173,10 @@ void updateDisplay(){
       break;
     case SET:
       writeSet();
+      break;
+    case TIMER:
+      writeTimer();
+      break;
   
     default:
       break;
@@ -163,7 +195,7 @@ void writeTemp() {
   lc.setDigit(0,0,tempBuffer[0], false);
   lc.setDigit(0,1,tempBuffer[1], true);
   lc.setDigit(0,2,tempBuffer[2], false);
-  lc.setChar(0,3,'C', true);
+  lc.setChar(0,3,TEMP_CHAR, true);
 
   timeOut--;
   if(timeOut == 0){
@@ -174,6 +206,17 @@ void writeTemp() {
 
 void writeSet() {
 
+}
+
+void writeTimer() {
+  if(timerState == RUNNING){
+    parseTimer();
+  }
+  lc.clearDisplay(0);
+  lc.setDigit(0,0,timerBuffer[0], false);
+  lc.setDigit(0,1,timerBuffer[1], timerRunning == RUNNING && blink);
+  lc.setDigit(0,2,timerBuffer[2], false);
+  lc.setDigit(0,3,timerBuffer[3], false);
 }
 
 void blinkTimeDot(){
@@ -189,9 +232,25 @@ void parseTime(){
 }
 
 void parseTemp() {
+  //rct.now();
   tempBuffer[0] = 1;
   tempBuffer[1] = 9;
   tempBuffer[2] = 6;
+}
+
+void parseTimer() {
+  TimeSpan span = rtc.now() -timerStart;
+  if(span.hours() == 0){
+    timerBuffer[0] = span.minutes() / 10;
+    timerBuffer[1] = span.minutes() % 10;
+    timerBuffer[2] = span.seconds() / 10;
+    timerBuffer[3] = span.seconds() % 10;
+  } else {
+    timerBuffer[0] = span.hours() / 10;
+    timerBuffer[1] = span.hours() % 10;
+    timerBuffer[2] = span.minutes() / 10;
+    timerBuffer[3] = span.minutes() % 10;
+  }
 }
 
 boolean beat = false;
