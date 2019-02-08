@@ -60,7 +60,6 @@ int second = 0;
 int timeOut = TEMP_TIMEOUT;
 
 DateTime timerStart = 0;
-boolean timerRunning = false;
 
 void setup() {
   Serial.begin(9600);
@@ -84,7 +83,7 @@ void setup() {
   timerButton.interval(DEBOUNCE);
 
   lc.shutdown(0,false);
-  lc.setIntensity(0,2);
+  lc.setIntensity(0,1);
   lc.clearDisplay(0);
 
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -133,20 +132,25 @@ void readButtons(){
 
   if(timerButton.fell()){
     if(displayState == TIMER){
-
-      //PAUSE TIMER AND HOLD
-      if(timerState == RUNNING) {
-        timerState == PAUSED;
-      } 
-      else if (timerState == PAUSED) {
+      //START TIMER COMMAND
+      if(timerState == STOPPED){
+        timerState =RUNNING;
+        timerStart = rtc.now();
+      }
+      //PAUSE TIMER COMMAND
+      else if(timerState == RUNNING){
+        timerState = PAUSED;
+      }
+      //STOP TIMER COMMAND
+      else {
         timerState = STOPPED;
         displayState = TIME;
-      } 
-      else {
-        timerState = RUNNING;
-        timerStart = rtc.now(); 
+        timerBuffer[0] = 0;
+        timerBuffer[1] = 0;
+        timerBuffer[2] = 0;
+        timerBuffer[3] = 0;
       }
-    } else {
+    }else {
       displayState = TIMER;
     }
   }
@@ -211,10 +215,10 @@ void writeSet() {
 void writeTimer() {
   if(timerState == RUNNING){
     parseTimer();
+    lc.clearDisplay(0);
   }
-  lc.clearDisplay(0);
   lc.setDigit(0,0,timerBuffer[0], false);
-  lc.setDigit(0,1,timerBuffer[1], timerRunning == RUNNING && blink);
+  lc.setDigit(0,1,timerBuffer[1], timerState == RUNNING && blink);
   lc.setDigit(0,2,timerBuffer[2], false);
   lc.setDigit(0,3,timerBuffer[3], false);
 }
@@ -239,7 +243,7 @@ void parseTemp() {
 }
 
 void parseTimer() {
-  TimeSpan span = rtc.now() -timerStart;
+  TimeSpan span = rtc.now() - timerStart;
   if(span.hours() == 0){
     timerBuffer[0] = span.minutes() / 10;
     timerBuffer[1] = span.minutes() % 10;
