@@ -51,7 +51,7 @@ enum TimerState
 };
 
 // States of configuration to go through
-enum SetState
+enum ConfigurationState
 {
   SECOND,
   MINUTE,
@@ -79,17 +79,12 @@ DisplayState displayState = TIME;
 // Active timer state
 TimerState timerState = STOPPED;
 // Active configuration state
-SetState configurationState = DISABLED;
+ConfigurationState configurationState = DISABLED;
 
 // Led Control object to control MAX72XX device
 LedControl lc = LedControl(12, 11, 10, 1);
 //RTC_DS3231 rtc;
 RTC_Millis rtc;
-
-char timeBuffer[4];
-int tempBuffer[3];
-int timerBuffer[4];
-int configBuffer[4];
 
 char displayBuffer[4];
 boolean dotBuffer[4];
@@ -140,7 +135,7 @@ void setup()
   timerButton.interval(DEBOUNCE);
 
   lc.shutdown(0, false);
-  lc.setIntensity(0, 1);
+  lc.setIntensity(0, 2);
   lc.clearDisplay(0);
 
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -189,7 +184,7 @@ void readButtons()
     else
     {
       displayState = DisplayState::CONFIG;
-      configurationState = SetState::START;
+      configurationState = ConfigurationState::START;
     }
   }
 
@@ -284,6 +279,14 @@ void writeTime()
   printDisplay();
 }
 
+void writeTimer()
+{
+  if(timerState == TimerState::RUNNING){
+   parseTimer();
+  }
+  dotBuffer[1] = (timerState == TimerState::RUNNING) && blink;
+}
+
 void writeTemp()
 {
   timeOut--;
@@ -293,6 +296,7 @@ void writeTemp()
     displayState = TIME;
   }
 }
+
 int setTimeBuffer[6];
 boolean leftDigit = true;
 void writeSet(ActionType type)
@@ -317,7 +321,7 @@ void writeSet(ActionType type)
       rtc.adjust(DateTime(2000 + setTimeBuffer[5], setTimeBuffer[4], setTimeBuffer[3], setTimeBuffer[2], setTimeBuffer[1], setTimeBuffer[0]));
       configurationState = DISABLED;
     }
-    configurationState = (SetState)configurationState + 1;
+    configurationState = (ConfigurationState)configurationState + 1;
     break;
   case ActionType::FUNCTION:
     leftDigit = !leftDigit;
@@ -347,19 +351,12 @@ void printDisplay()
   lc.setChar(0, 3, displayBuffer[3], dotBuffer[3]);
 }
 
-void writeTimer()
-{
-  if(timerState == TimerState::RUNNING){
-   parseTimer();
-  }
-  dotBuffer[1] = (timerState == TimerState::RUNNING) && blink;
-}
-
 void blinkTimeDot()
 {
   blink = !blink;
 }
 
+//Parses and feeds the time into display buffer
 void parseTime()
 {
   DateTime now = rtc.now();
@@ -367,9 +364,9 @@ void parseTime()
   displayBuffer[1] = ((now.hour()) % 10);
   displayBuffer[2] = ((now.minute()) / 10);
   displayBuffer[3] = ((now.minute()) % 10);
-
 }
 
+//Parses temp and feeds into displayBuffer and manages conversion of units
 void parseTemp()
 {
   //rct.now();
@@ -380,6 +377,7 @@ void parseTemp()
   dotBuffer[3] = true;
 }
 
+//Calculates timer span and parses into displayBuffer
 void parseTimer()
 {
   TimeSpan span = rtc.now() - timerStart;
@@ -406,6 +404,7 @@ void heartbeat()
   beat = !beat;
 }
 
+//Clears displayBuffer before new data enters
 void clearDisplayBuffer(){
   displayBuffer[0] = 0;
   displayBuffer[1] = 0;
