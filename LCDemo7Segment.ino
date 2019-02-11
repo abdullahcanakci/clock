@@ -13,7 +13,7 @@
  We have only a single MAX72XX.
  */
 #define NUMBER_OF_DIGITS 4
-#define TEMP_CHAR 'F'
+#define TEMP_CHAR 'C'
 #define TEMP_TIMEOUT 15;
 #define BUTTON_SET_PIN 2 //
 #define BUTTON_FUNCTION_PIN 3
@@ -62,7 +62,6 @@ enum ConfigurationState
   YEAR,
   BRIGHTNESS,
   END,
-  START,
   DISABLED,
 };
 
@@ -87,6 +86,7 @@ LedControl lc = LedControl(12, 11, 10, 1);
 //RTC_DS3231 rtc;
 RTC_Millis rtc;
 
+//Buffers for display
 char displayBuffer[4];
 boolean dotBuffer[4];
 
@@ -124,33 +124,50 @@ void setup()
   timerButton.attach(BUTTON_TIMER_BUTTON);
   timerButton.interval(DEBOUNCE);
 
+  //Chip is disabled at boot need to enable
   lc.shutdown(0, false);
   lc.setIntensity(0, brightness);
   lc.clearDisplay(0);
 
-  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  //if(rtc.lostPower()){
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); //DS3231 has lostPower function.
+  //}
+  //To sychorinze minute operations with clock chip
   second = rtc.now().second();
 }
+
 long preMillis = 0;
+int halfSecond = 0;
 void loop()
 {
   long p = millis();
   readButtons();
-  if (p - preMillis >= 1000)
+  if (p - preMillis >= 500)
   {
+    halfSecond++;
     preMillis = p;
-    FUNC_ON_SECOND();
+    FUNC_ON_500_MILLI();
+
+    if (halfSecond == 2)
+    {
+      FUNC_ON_SECOND();
+      halfSecond = 0;
+    }
   }
+}
+
+// General display update, For better response time and lower bandwith usage
+void FUNC_ON_500_MILLI()
+{
+  updateDisplay();
+  printDisplay();
 }
 
 void FUNC_ON_SECOND()
 {
-  updateDisplay();
-  printDisplay();
   blinkTimeDot();
-  //heartbeat();
   second++;
-  if (second > 60)
+  if (second >= 60)
   {
     FUNC_ON_MINUTE();
   }
@@ -158,7 +175,7 @@ void FUNC_ON_SECOND()
 
 void FUNC_ON_MINUTE()
 {
-  second = 0;
+  second = rtc.now().second(); //We are using internal clock to roughly estimate minute operations but they may be off -not much- we are syncing it here
 }
 
 void readButtons()
@@ -167,15 +184,7 @@ void readButtons()
 
   if (setButton.fell())
   {
-    if (displayState == DisplayState::TIME)
-    {
-      displayState = DisplayState::CONFIG;
-      writeSet(ActionType::CONTINUE);
-    }
-    else if (displayState == DisplayState::CONFIG)
-    {
-      writeSet(ActionType::CONTINUE);
-    }
+    writeSet(ActionType::CONTINUE);
   }
 
   functionButton.update();
@@ -265,7 +274,6 @@ void writeTime()
   parseTime();
   dotBuffer[1] = blink;
   dotBuffer[2] = blink;
-  //printDisplay();
 }
 
 void writeTimer()
@@ -284,12 +292,13 @@ void writeTemp()
   {
     timeOut = TEMP_TIMEOUT;
     displayState = TIME;
+    clearDisplayBuffer();
   }
 }
 
 char configurationTag[] = {
     '5',
-    '0',
+    'L',
     'H',
     'd',
     'A',
@@ -304,36 +313,40 @@ boolean originalConfigurationValue = -1;
 boolean leftDigit = true;
 void writeSet(ActionType type)
 {
-  Serial.println("Write set " + type);
 
-  if(type == ActionType::CONTINUE){
+  if (type == ActionType::CONTINUE)
+  {
     //First entry
-    if(configurationState == ConfigurationState::DISABLED){
-    clearDisplayBuffer();
-    DateTime time = rtc.now();
-    setTimeBuffer[0] = time.second();
-    setTimeBuffer[1] = time.minute();
-    setTimeBuffer[2] = time.hour();
-    setTimeBuffer[3] = time.day();
-    setTimeBuffer[4] = time.month();
-    setTimeBuffer[5] = time.year() % 1000;
-    setTimeBuffer[6] = brightness;
-    configurationState = ConfigurationState(-1);
-    displayState = DisplayState::CONFIG;
-    displayBuffer[0] = 'e';
-    displayBuffer[1] = 'd';
-    displayBuffer[2] = '1';
-    displayBuffer[3] = '7';
-    return;
+    if (configurationState == ConfigurationState::DISABLED)
+    {
+      clearDisplayBuffer();
+      DateTime time = rtc.now();
+      setTimeBuffer[0] = time.second();
+      setTimeBuffer[1] = time.minute();
+      setTimeBuffer[2] = time.hour();
+      setTimeBuffer[3] = time.day();
+      setTimeBuffer[4] = time.month();
+      setTimeBuffer[5] = time.year() % 1000;
+      setTimeBuffer[6] = brightness;
+      configurationState = ConfigurationState(-1);
+      displayState = DisplayState::CONFIG;
+      displayBuffer[0] = 'e';
+      displayBuffer[1] = 'd';
+      displayBuffer[2] = '1';
+      displayBuffer[3] = '7';
+      return;
     }
-    if(type == ActionType::CONTINUE){
-      if(originalConfigurationValue != -1 && originalConfigurationValue != setTimeBuffer[configurationState]){
+    if (type == ActionType::CONTINUE)
+    {
+      if (originalConfigurationValue != -1 && originalConfigurationValue != setTimeBuffer[configurationState])
+      {
         hasConfigurationChanged[configurationState] = true;
       }
       configurationState = ConfigurationState(configurationState + 1);
       originalConfigurationValue = setTimeBuffer[configurationState];
     }
-    if (configurationState == ConfigurationState::END){
+    if (configurationState == ConfigurationState::END)
+    {
 
       configurationState = ConfigurationState::DISABLED;
       displayState = DisplayState::TIME;
@@ -345,50 +358,49 @@ void writeSet(ActionType type)
       //We are starting set mode with a fixed time if we use that and transfer it to the clock, it will be always behind
       //To fix this, we are taking a new time and create a comlex structure between to where user edited settings.
       DateTime complex = DateTime(
-        hasConfigurationChanged[5] ? (setTimeBuffer[5] + 2000) : end.year(),
-        hasConfigurationChanged[4] ? setTimeBuffer[4] : end.month(),
-        hasConfigurationChanged[3] ? setTimeBuffer[3] : end.day(),
-        hasConfigurationChanged[2] ? setTimeBuffer[2] : end.hour(),
-        hasConfigurationChanged[1] ? setTimeBuffer[1] : end.minute(),
-        hasConfigurationChanged[0] ? setTimeBuffer[0] : end.second()
-      );
+          hasConfigurationChanged[5] ? (setTimeBuffer[5] + 2000) : end.year(),
+          hasConfigurationChanged[4] ? setTimeBuffer[4] : end.month(),
+          hasConfigurationChanged[3] ? setTimeBuffer[3] : end.day(),
+          hasConfigurationChanged[2] ? setTimeBuffer[2] : end.hour(),
+          hasConfigurationChanged[1] ? setTimeBuffer[1] : end.minute(),
+          hasConfigurationChanged[0] ? setTimeBuffer[0] : end.second());
       rtc.adjust(complex);
       originalConfigurationValue = -1;
-            for(int i = 0; i < 7; i++){
+      for (int i = 0; i < 7; i++)
+      {
         hasConfigurationChanged[i] = false;
-        Serial.println(setTimeBuffer[i]);
       }
       return;
     }
-      
   }
 
-  
-  if (type == ActionType::FUNCTION){
+  if (type == ActionType::FUNCTION)
+  {
     leftDigit = !leftDigit;
-  } else if (type == ActionType::INCREASE){
-      Serial.println("Increase button");
-      int newValue = setTimeBuffer[configurationState];
-      newValue += leftDigit == true ? 10 : 1;
-      newValue = newValue % configurationOverflow[configurationState];
-      setTimeBuffer[configurationState] = newValue;
-  } else if (type == ActionType::DECREASE){
-    Serial.println("Increase button");
-      int newValue = setTimeBuffer[configurationState];
-      newValue -= leftDigit == true ? 10 : 1;
-      newValue += configurationOverflow[configurationState];
-      newValue = newValue % configurationOverflow[configurationState];
-      setTimeBuffer[configurationState] = newValue;
+  }
+  else if (type == ActionType::INCREASE)
+  {
+    int newValue = setTimeBuffer[configurationState];
+    newValue += leftDigit == true ? 10 : 1;
+    newValue = newValue % configurationOverflow[configurationState];
+    setTimeBuffer[configurationState] = newValue;
+  }
+  else if (type == ActionType::DECREASE)
+  {
+    int newValue = setTimeBuffer[configurationState];
+    newValue -= leftDigit == true ? 10 : 1;
+    newValue += configurationOverflow[configurationState];
+    newValue = newValue % configurationOverflow[configurationState];
+    setTimeBuffer[configurationState] = newValue;
   }
 
-    displayBuffer[0] = configurationTag[configurationState];
-    displayBuffer[1] = ' ';
-    displayBuffer[2] = setTimeBuffer[configurationState] / 10;
-    displayBuffer[3] = setTimeBuffer[configurationState] % 10;
+  displayBuffer[0] = configurationTag[configurationState];
+  displayBuffer[1] = ' ';
+  displayBuffer[2] = setTimeBuffer[configurationState] / 10;
+  displayBuffer[3] = setTimeBuffer[configurationState] % 10;
 
-    dotBuffer[2] = leftDigit;
-    dotBuffer[3] = !leftDigit;
-  
+  dotBuffer[2] = leftDigit;
+  dotBuffer[3] = !leftDigit;
 }
 
 void printDisplay()
