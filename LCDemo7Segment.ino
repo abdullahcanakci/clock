@@ -159,18 +159,22 @@ void setup()
   lc.shutdown(0, false);
   lc.setIntensity(0, 1);
   lc.clearDisplay(0);
-  if(!rtc.begin()){
+  if (!rtc.begin())
+  {
     Serial.println("There is no RTC chip detected.");
     delay(500);
-    while(1);
+    while (1)
+      ;
   }
 
-  
-  if(rtc.lostPower()){
+  if (rtc.lostPower())
+  {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); //DS3231 has lostPower register
     Serial.println("Seems like RTC chip lost power time set to flash time.");
-  }else {
-    
+  }
+  else
+  {
+
     char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
     Serial.println("Time is:");
     DateTime now = rtc.now();
@@ -229,7 +233,7 @@ void FUNC_ON_SECOND()
     FUNC_ON_MINUTE();
   }
   int value = analogRead(LDR_PIN);
-  lc.setIntensity(0,map(value, 0, 1100, 8, 0));
+  lc.setIntensity(0, map(value, 0, 1100, 5, 0));
 }
 
 void FUNC_ON_MINUTE()
@@ -345,7 +349,6 @@ void writeTemp()
     displayState = TIME;
   }
 }
-
 
 void writeSet(ActionType type)
 {
@@ -486,31 +489,34 @@ void parseTemp()
 //Calculates timer span and parses into displayBuffer
 void parseTimer()
 {
-  if(timerState == TimerState::STOPPED){
-      dotBuffer[1] = false;
-    return;
-  }
-  clearDisplayBuffer();
+  
   TimeSpan span = rtc.now() - timerStart;
-  if (timerState == TimerState::STOPPED){
+  if (timerState == TimerState::STOPPED)
+  {
+    clearDisplayBuffer();
     displayBuffer[0] = 0;
     displayBuffer[1] = 0;
     displayBuffer[2] = 0;
     displayBuffer[3] = 0;
+    return;
   }
-  else if (span.hours() == 0)
+  if (timerState == TimerState::RUNNING)
   {
-    displayBuffer[0] = span.minutes() / 10;
-    displayBuffer[1] = span.minutes() % 10;
-    displayBuffer[2] = span.seconds() / 10;
-    displayBuffer[3] = span.seconds() % 10;
-  }
-  else
-  {
-    displayBuffer[0] = span.hours() / 10;
-    displayBuffer[1] = span.hours() % 10;
-    displayBuffer[2] = span.minutes() / 10;
-    displayBuffer[3] = span.minutes() % 10;
+    clearDisplayBuffer();
+    if (span.hours() == 0)
+    {
+      displayBuffer[0] = span.minutes() / 10;
+      displayBuffer[1] = span.minutes() % 10;
+      displayBuffer[2] = span.seconds() / 10;
+      displayBuffer[3] = span.seconds() % 10;
+    }
+    else
+    {
+      displayBuffer[0] = span.hours() / 10;
+      displayBuffer[1] = span.hours() % 10;
+      displayBuffer[2] = span.minutes() / 10;
+      displayBuffer[3] = span.minutes() % 10;
+    }
   }
   dotBuffer[1] = timerState == TimerState::RUNNING && blink;
 }
