@@ -1,7 +1,8 @@
 {
-    "programmer": "AVRISP mkII",
-    "board": "arduino:avr:uno",
+    "programmer": "USBasp",
+    "board": "arduino:avr:pro",
     "sketch": "LCDemo7Segment.ino",
-    "port": "COM4",
-    "output": "../build"
+    "port": "COM5",
+    "output": "../build",
+    "configuration": "cpu=16MHzatmega328"
 }
