@@ -157,7 +157,7 @@ void setup()
 
   //Chip is disabled at boot need to enable
   lc.shutdown(0, false);
-  lc.setIntensity(0, 1);
+  lc.setIntensity(0, 6);
   lc.clearDisplay(0);
   if (!rtc.begin())
   {
@@ -198,27 +198,21 @@ void setup()
 }
 
 long preMillis = 0;
-int halfSecond = 0;
 void loop()
 {
   long p = millis();
   readButtons();
-  if (p - preMillis >= 500)
+  FUNC_ON_10_MILLI();
+  if (p - preMillis >= 1000)
   {
-    halfSecond++;
     preMillis = p;
-    FUNC_ON_500_MILLI();
-
-    if (halfSecond == 2)
-    {
-      FUNC_ON_SECOND();
-      halfSecond = 0;
-    }
+    FUNC_ON_SECOND();
+    Serial.println(millis() - p, DEC);
   }
 }
 
 // General display update, For better response time and lower bandwith usage
-void FUNC_ON_500_MILLI()
+void FUNC_ON_10_MILLI()
 {
   updateDisplay();
   printDisplay();
@@ -233,7 +227,10 @@ void FUNC_ON_SECOND()
     FUNC_ON_MINUTE();
   }
   int value = analogRead(LDR_PIN);
-  lc.setIntensity(0, map(value, 0, 1100, 5, 0));
+  if(value != brightness){
+    brightness = value;
+    lc.setIntensity(0, map(value, 0, 1100, 15, 0));
+  }
 }
 
 void FUNC_ON_MINUTE()
@@ -444,7 +441,7 @@ void writeSet(ActionType type)
 
 void printDisplay()
 {
-  lc.clearDisplay(0);
+  //lc.clearDisplay(0);
   lc.setChar(0, 0, displayBuffer[0], dotBuffer[0]);
   lc.setChar(0, 1, displayBuffer[1], dotBuffer[1]);
   lc.setChar(0, 2, displayBuffer[2], dotBuffer[2]);
