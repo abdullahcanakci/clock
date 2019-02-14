@@ -14,7 +14,7 @@
  */
 #define NUMBER_OF_DIGITS 4
 #define TEMP_CHAR 'C'
-#define TEMP_TIMEOUT 15;
+#define TEMP_TIMEOUT 15L
 #define BUTTON_SET_PIN 2 //
 #define BUTTON_FUNCTION_PIN 3
 #define BUTTON_TEMP_BUTTON 4  //WILL BE USED FOR  DECREASE
@@ -98,7 +98,7 @@ boolean blink = false;
 int second = 0;
 
 // Keeps track of seconds to left on Temp screen
-int timeOut = TEMP_TIMEOUT;
+long timeOut = TEMP_TIMEOUT;
 
 // Start of the timer.
 DateTime timerStart = 0;
@@ -200,15 +200,16 @@ void setup()
 long preMillis = 0;
 void loop()
 {
-  long p = millis();
   readButtons();
   FUNC_ON_10_MILLI();
-  if (p - preMillis >= 1000)
+  long p = millis();
+  if (p - preMillis >= 1000L)
   {
-    preMillis = p;
+    preMillis = millis();
     FUNC_ON_SECOND();
-    Serial.println(millis() - p, DEC);
+    Serial.println("Function on second");
   }
+  delay(1);
 }
 
 // General display update, For better response time and lower bandwith usage
@@ -304,6 +305,7 @@ void readButtons()
     else
     {
       displayState = TEMP;
+      timeOut = millis() + 1000 * 15; //plus 15 seconds
     }
   }
 }
@@ -339,10 +341,9 @@ void writeTimer()
 
 void writeTemp()
 {
-  timeOut--;
-  if (timeOut == 0)
+  if (timeOut < millis())
   {
-    timeOut = TEMP_TIMEOUT;
+    timeOut = 0L;
     displayState = TIME;
   }
 }
