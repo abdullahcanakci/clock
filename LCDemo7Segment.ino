@@ -1,29 +1,47 @@
-//We always have to include the library
 #include <LedControl.h>
 #include <Wire.h>
 #include <RTClib.h>
 #include <Bounce2.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 /*
- Now we need a LedControl to work with.
- ***** These pin numbers will probably not work with your hardware *****
- pin 12 is connected to the DataIn 
- pin 11 is connected to the CLK 
- pin 10 is connected to LOAD 
- We have only a single MAX72XX.
- */
+* MAX72XX
+* Led driver
+* pin 12 is connected to the DataIn
+* pin 11 is connected to the CLK 
+* pin 10 is connected to LOAD 
+* We have only a single MAX72XX.
+*/
+/*
+* DS18B20
+* 1 wire tempature Sensor
+* pin 6 is conected to te Data
+*/
+/*
+* DS3131
+* I2C RTC sensor with accuracy of 1 minute per year
+* SDA to SDA
+* SCL to SCL
+*/
 #define NUMBER_OF_DIGITS 4
-#define TEMP_CHAR 'C'
-#define TEMP_TIMEOUT 15L
-#define BUTTON_SET_PIN 2 //
-#define BUTTON_FUNCTION_PIN 3
-#define BUTTON_TEMP_BUTTON 4  //WILL BE USED FOR  DECREASE
-#define BUTTON_TIMER_BUTTON 5 //WILL BE USED FOR INCREASE
-#define LDR_PIN A0
+#define TEMPERATURE_UNIT 'C'
+#define TEMP_TIMEOUT 15L // Time out for temperature display
+#define BUTTON_SET_PIN 2 // 
+#define BUTTON_FUNCTION_PIN 3 // USED FOR ALTERNATE ACTIONS
+#define BUTTON_TEMP_BUTTON 4  // WILL BE USED FOR DECREASE
+#define BUTTON_TIMER_BUTTON 5 // WILL BE USED FOR INCREASE
+#define TEMP_SENSE_PIN 6
+#define LDR_PIN A0 //TO ADJUST BRIGHTNESS
 #define DEBOUNCE 25
 
-int brightness = 4;
-char tempChar = TEMP_CHAR;
+//Max brightness
+int brightness = 15; 
+char tempChar = TEMPERATURE_UNIT; //Cant provide C or F to the LedConrol from #define properties
+
+/*
+* BUTTONS *****************************
+*/
 
 Bounce setButton = Bounce();
 Bounce functionButton = Bounce();
@@ -32,8 +50,22 @@ Bounce tempButton = Bounce();
 // ALT USE INCREASE
 Bounce timerButton = Bounce();
 
-//SOFTWARE
+/*
+* TEMPERATUR SET - UP *****************
+*/
+OneWire oneWire(TEMP_SENSE_PIN);
+DallasTemperature tempSensor(&oneWire);
 
+// Led Control object to control MAX72XX device
+LedControl lc = LedControl(12, 11, 10, 1);
+//rtc access object
+RTC_DS3231 rtc; //Alternate chips can be used from Adafruit RTClib
+//RTC_Millis rtc; //Can be used but it will roll over after ~48days
+
+/*
+* ENUMS *******************************
+*/
+//States of the Main display. Eventually their parse functions will be called to fill displayBuffer
 enum DisplayState
 {
   TIME,
@@ -52,7 +84,12 @@ enum TimerState
   RUNNING,
 };
 
-// States of configuration to go through
+/*
+* States of configuration to go through
+* We are iterating through this enum list. !!!
+* Do not alter sorting without sorting relevant arrays
+* configurationTag, configurationBuffer, configurationOverflow, hasConfigurationChanged
+*/
 enum ConfigurationState
 {
   SECOND,
@@ -81,11 +118,6 @@ DisplayState displayState = TIME;
 TimerState timerState = STOPPED;
 // Active configuration state
 ConfigurationState configurationState = DISABLED;
-
-// Led Control object to control MAX72XX device
-LedControl lc = LedControl(12, 11, 10, 1);
-RTC_DS3231 rtc;
-//RTC_Millis rtc;
 
 //Buffers for display
 char displayBuffer[4];
@@ -134,8 +166,7 @@ void setup()
 {
   Serial.begin(9600);
   delay(500);
-
-  pinMode(LED_BUILTIN, OUTPUT);
+  Serial.println("Boot started");
 
   pinMode(BUTTON_SET_PIN, INPUT_PULLUP);
   setButton.attach(BUTTON_SET_PIN);
@@ -155,51 +186,38 @@ void setup()
 
   pinMode(LDR_PIN, INPUT);
 
+  Serial.println("Buttons are wired up.");
+
   //Chip is disabled at boot need to enable
   lc.shutdown(0, false);
   lc.setIntensity(0, 6);
   lc.clearDisplay(0);
-  if (!rtc.begin())
-  {
-    Serial.println("There is no RTC chip detected.");
-    delay(500);
-    while (1)
-      ;
+
+  Serial.println("Display init.");
+  while(!rtc.begin()){
+    Serial.println("There is no RTC chip detected. Try reconnecting in 1000ms");
+    delay(1000);
   }
 
+  //Some chips has lost power function. DS3231 is one of them.
+  //If the battery has failed this will return true and we can use Flashing DateTime to set.
+  // You may need to remove if for the first flash. My device didnt worked fine until I adjusted it.
   if (rtc.lostPower())
   {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); //DS3231 has lostPower register
     Serial.println("Seems like RTC chip lost power time set to flash time.");
   }
-  else
-  {
-
-    char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
-    Serial.println("Time is:");
-    DateTime now = rtc.now();
-    Serial.print(now.year(), DEC);
-    Serial.print('/');
-    Serial.print(now.month(), DEC);
-    Serial.print('/');
-    Serial.print(now.day(), DEC);
-    Serial.print(" (");
-    Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
-    Serial.print(") ");
-    Serial.print(now.hour(), DEC);
-    Serial.print(':');
-    Serial.print(now.minute(), DEC);
-    Serial.print(':');
-    Serial.print(now.second(), DEC);
-    Serial.println();
-  }
   //To sychorinze minute operations with clock chip
+  //We can use minute operations. - not used - sychorinzed with RTC clock
   second = rtc.now().second();
+  Serial.println("Boot finished");
 }
 
 long preMillis = 0;
 void loop()
 {
+  //This loop is taking 2-3 ms on 328p at 5V with 16Mhz clock speed while working 10_milli second and minute operation.
+  //Need to lean it up but dont need it really buttons are not missed, display state changes are rapid etc.
   readButtons();
   FUNC_ON_10_MILLI();
   long p = millis();
@@ -207,12 +225,11 @@ void loop()
   {
     preMillis = millis();
     FUNC_ON_SECOND();
-    Serial.println("Function on second");
   }
   delay(1);
 }
 
-// General display update, For better response time and lower bandwith usage
+// General display update
 void FUNC_ON_10_MILLI()
 {
   updateDisplay();
@@ -236,7 +253,7 @@ void FUNC_ON_SECOND()
 
 void FUNC_ON_MINUTE()
 {
-  second = rtc.now().second(); //We are using internal clock to roughly estimate minute operations but they may be off -not much- we are syncing it here
+ second = rtc.now().second(); //We are using internal clock to roughly estimate minute operations but they may be off -not much- we are syncing it here
 }
 
 void readButtons()
@@ -442,7 +459,7 @@ void writeSet(ActionType type)
 
 void printDisplay()
 {
-  //lc.clearDisplay(0);
+  //Dont need to clear display we are writing everything
   lc.setChar(0, 0, displayBuffer[0], dotBuffer[0]);
   lc.setChar(0, 1, displayBuffer[1], dotBuffer[1]);
   lc.setChar(0, 2, displayBuffer[2], dotBuffer[2]);
@@ -470,8 +487,21 @@ void parseTime()
 //Parses temp and feeds into displayBuffer and manages conversion of units
 void parseTemp()
 {
+  tempSensor.requestTemperatures();   
+  float t;
+  if(TEMPERATURE_UNIT == 'C'){
+    t = tempSensor.getTempCByIndex(0);
+  } else {
+    t = tempSensor.getTempFByIndex(0);
+  }
+  //DS18B20 needs some time to convert waiting for it
+  delay(200);
+
   clearDisplayBuffer();
-  int temp = rtc.getTemp();
+  //Temperature is float but it is no bueno
+  //Multiplying because I want 2 significant bits to survive int conversion.
+  //19.15 turn to 1915 and we can use regular int operations to parse it
+  int temp = (int)(t * 100);
   Serial.print("Temp: ");
   Serial.println(temp, DEC);
   displayBuffer[0] = temp / 1000;
