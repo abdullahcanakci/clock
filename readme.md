@@ -4,14 +4,6 @@ To watch it in action: https://youtu.be/i7sEzjXTG-Q
 
 English is just below ;)
 
-### TODO
-
-- [ ] Add Schematics
-
-
-
-
-
 ## SAAT
 
 *SAAT* dediğimiz şey nedir ki? Zamanı falan gösteren bir şey. Bu projede bir saatin sahip olması gereken her şey ve daha fazlası var. Kullandığı sıcaklık sensörü sayesinde bulunduğun ortamı ne kadar ısıttığını bulabilir, kronometre sayesinde ise ocaktaki yumurtayı en sevdiğin şekilde pişirebilirsin.
@@ -38,7 +30,7 @@ Neye ihtiyacınız var?
 - 1x 1uF elektrolitik kapasitör, RTC çip için 
 - 1x 100uF elektrolitik kapasitör, MAX7219 için
 - 1x 100nF seramic kapasitör, MAX7219 için
-- 3 x 10k ohm direnç
+- 4 x 10k ohm direnç
 - 1 x 100 to 470 ohm direnç, Ekran noktaları için.
 
 #### Eksikler
@@ -53,6 +45,8 @@ Neye ihtiyacınız var?
 ###### Gerekli Kütüphaneler
 
 LedControl, RTCLib - Adafruit, Bounce2, OneWire, DallasTemperature, Wire
+
+Gerekli şematiğe [bu adresten](https://easyeda.com/abdullahcanakci/clock_) veya repo içinde Türkçe_Şematik.pdf dosyasından ulaşabilirsiniz.
 
 
 
@@ -82,7 +76,7 @@ What do I need?
 - 1x 1uF electrolytic capacitor for RTC chip
 - 1x 100uF electrolytic capacitor for MAX7219
 - 1x 100nF seramic capacitor for MAX7219
-- 3 x 10k ohm resistors.
+- 4 x 10k ohm resistors.
 - 1 x 100 to 470 ohm resistor for segment dot. 
 
 ### Shortcomings
@@ -97,6 +91,10 @@ At the release of this code base I assumed every component it included and wrote
 ###### Needed Libraries
 
 LedControl, RTCLib - Adafruit, Bounce2, OneWire, DallasTemperature, Wire
+
+
+
+You can access to the schematic from [this link](https://easyeda.com/abdullahcanakci/clock_) or English_Schematic.pdf file from the repository.
 
 
 
