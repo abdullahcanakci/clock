@@ -30,7 +30,7 @@ Neye ihtiyacınız var?
 - 1x 1uF elektrolitik kapasitör, RTC çip için 
 - 1x 100uF elektrolitik kapasitör, MAX7219 için
 - 1x 100nF seramic kapasitör, MAX7219 için
-- 4 x 10k ohm direnç
+- 5 x 10k ohm direnç
 - 1 x 100 to 470 ohm direnç, Ekran noktaları için.
 
 #### Eksikler
@@ -76,7 +76,7 @@ What do I need?
 - 1x 1uF electrolytic capacitor for RTC chip
 - 1x 100uF electrolytic capacitor for MAX7219
 - 1x 100nF seramic capacitor for MAX7219
-- 4 x 10k ohm resistors.
+- 5 x 10k ohm resistors.
 - 1 x 100 to 470 ohm resistor for segment dot. 
 
 ### Shortcomings
