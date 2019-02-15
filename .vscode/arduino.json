@@ -1,8 +1,0 @@
-{
-    "programmer": "USBasp",
-    "board": "arduino:avr:pro",
-    "sketch": "LCDemo7Segment.ino",
-    "port": "COM5",
-    "output": "../build",
-    "configuration": "cpu=16MHzatmega328"
-}
