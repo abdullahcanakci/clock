@@ -186,6 +186,8 @@ void setup()
 
   pinMode(LDR_PIN, INPUT);
 
+  tempSensor.setResolution(12);
+
   Serial.println("Buttons are wired up.");
 
   //Chip is disabled at boot need to enable
@@ -487,21 +489,29 @@ void parseTime()
 //Parses temp and feeds into displayBuffer and manages conversion of units
 void parseTemp()
 {
-  tempSensor.requestTemperatures();   
+  //We cant just request and receive the temperature reading. It takes time on DS18B20 devices.
+  if(!tempSensor.isConversionComplete()){
+    return;
+  }
+
   float t;
-  if(TEMPERATURE_UNIT == 'C'){
+  if (TEMPERATURE_UNIT == 'C')
+  {
     t = tempSensor.getTempCByIndex(0);
-  } else {
+  }
+  else
+  {
     t = tempSensor.getTempFByIndex(0);
   }
-  //DS18B20 needs some time to convert waiting for it
-  delay(200);
-
-  clearDisplayBuffer();
-  //Temperature is float but it is no bueno
+  //Temperature is float but it is no bueno to parse
   //Multiplying because I want 2 significant bits to survive int conversion.
   //19.15 turn to 1915 and we can use regular int operations to parse it
   int temp = (int)(t * 100);
+
+  //We received temp reading. Request a new one to display
+  tempSensor.requestTemperaturesByIndex(0);
+
+  clearDisplayBuffer();
   Serial.print("Temp: ");
   Serial.println(temp, DEC);
   displayBuffer[0] = temp / 1000;
