@@ -24,14 +24,19 @@
 * SDA to SDA
 * SCL to SCL
 */
+#define CLOCK_VERSION 1
+
 #define NUMBER_OF_DIGITS 4
 #define TEMPERATURE_UNIT 'C'
 #define TEMP_TIMEOUT 15L // Time out for temperature display
+#define DS18B20_ACCURACY 12
+#define TEMP_READING_INTERVAL //DS18B20 has a problem when constant transmission might create temp rise on the chip and produce higher than normal value
 #define BUTTON_SET_PIN 2 // 
 #define BUTTON_FUNCTION_PIN 3 // USED FOR ALTERNATE ACTIONS
 #define BUTTON_TEMP_BUTTON 4  // WILL BE USED FOR DECREASE
 #define BUTTON_TIMER_BUTTON 5 // WILL BE USED FOR INCREASE
 #define TEMP_SENSE_PIN 6
+#define LDR_ENABLE true
 #define LDR_PIN A0 //TO ADJUST BRIGHTNESS
 #define DEBOUNCE 25
 
@@ -130,7 +135,11 @@ boolean blink = false;
 int second = 0;
 
 // Keeps track of seconds to left on Temp screen
-long timeOut = TEMP_TIMEOUT;
+unsigned long timeOut = TEMP_TIMEOUT;
+//DS18B20 sensors has a problem when under constant transmission it might heat up.
+int tempReadingInterval = 200;
+//Time of temp reading.
+long previousTempReading = 0L;
 
 // Start of the timer.
 DateTime timerStart = 0;
@@ -167,6 +176,8 @@ void setup()
   Serial.begin(9600);
   delay(500);
   Serial.println("Boot started");
+  Serial.print("Clock version");
+  Serial.println(CLOCK_VERSION, DEC);
 
   pinMode(BUTTON_SET_PIN, INPUT_PULLUP);
   setButton.attach(BUTTON_SET_PIN);
@@ -184,9 +195,11 @@ void setup()
   timerButton.attach(BUTTON_TIMER_BUTTON);
   timerButton.interval(DEBOUNCE);
 
-  pinMode(LDR_PIN, INPUT);
+  if(LDR_ENABLE){
+    pinMode(LDR_PIN, INPUT);
+  }
 
-  tempSensor.setResolution(12);
+  tempSensor.setResolution(DS18B20_ACCURACY);
 
   Serial.println("Buttons are wired up.");
 
@@ -246,10 +259,14 @@ void FUNC_ON_SECOND()
   {
     FUNC_ON_MINUTE();
   }
-  int value = analogRead(LDR_PIN);
-  if(value != brightness){
-    brightness = value;
-    lc.setIntensity(0, map(value, 0, 1100, 15, 0));
+  if (LDR_ENABLE)
+  {
+    int value = analogRead(LDR_PIN);
+    if (value != brightness)
+    {
+      brightness = value;
+      lc.setIntensity(0, map(value, 0, 1100, 15, 0));
+    }
   }
 }
 
@@ -323,8 +340,9 @@ void readButtons()
     }
     else
     {
-      displayState = TEMP;
-      timeOut = millis() + 1000 * 15; //plus 15 seconds
+      displayState = DisplayState::TEMP;
+      previousTempReading = 0L;
+      timeOut = millis() + 1000 * 15L; //plus 15 seconds
     }
   }
 }
@@ -409,17 +427,17 @@ void writeSet(ActionType type)
       brightness = configurationBuffer[6];
       lc.setIntensity(0, configurationBuffer[6]);
       clearDisplayBuffer();
-      DateTime end = rtc.now();
+      DateTime endPoint = rtc.now();
 
       //We are starting set mode with a fixed time if we use that and transfer it to the clock, it will be always behind
-      //To fix this, we are taking a new time and create a comlex structure between to where user edited settings.
+      //To fix this, we are taking a new time and create a complex structure between to where user edited settings.
       DateTime complex = DateTime(
-          hasConfigurationChanged[5] ? (configurationBuffer[5] + 2000) : end.year(),
-          hasConfigurationChanged[4] ? configurationBuffer[4] : end.month(),
-          hasConfigurationChanged[3] ? configurationBuffer[3] : end.day(),
-          hasConfigurationChanged[2] ? configurationBuffer[2] : end.hour(),
-          hasConfigurationChanged[1] ? configurationBuffer[1] : end.minute(),
-          hasConfigurationChanged[0] ? configurationBuffer[0] : end.second());
+          hasConfigurationChanged[5] ? (configurationBuffer[5] + 2000) : endPoint.year(),
+          hasConfigurationChanged[4] ? configurationBuffer[4] : endPoint.month(),
+          hasConfigurationChanged[3] ? configurationBuffer[3] : endPoint.day(),
+          hasConfigurationChanged[2] ? configurationBuffer[2] : endPoint.hour(),
+          hasConfigurationChanged[1] ? configurationBuffer[1] : endPoint.minute(),
+          hasConfigurationChanged[0] ? configurationBuffer[0] : endPoint.second());
       rtc.adjust(complex);
       originalConfigurationValue = -1;
       for (int i = 0; i < 7; i++)
@@ -489,6 +507,11 @@ void parseTime()
 //Parses temp and feeds into displayBuffer and manages conversion of units
 void parseTemp()
 {
+  //wait until ne 
+  if(millis() - previousTempReading < tempReadingInterval){
+    Serial.println("Passing temperature reading. This is not the time.");
+    return;
+  }
   //We cant just request and receive the temperature reading. It takes time on DS18B20 devices.
   if(!tempSensor.isConversionComplete()){
     return;
@@ -522,6 +545,8 @@ void parseTemp()
   displayBuffer[3] = tempChar;
   dotBuffer[1] = true;
   dotBuffer[3] = true;
+
+  previousTempReading = millis();
 }
 
 //Calculates timer span and parses into displayBuffer
