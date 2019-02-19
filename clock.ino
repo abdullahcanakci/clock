@@ -37,13 +37,22 @@
 #define BUTTON_TEMP_BUTTON 4  // WILL BE USED FOR DECREASE
 #define BUTTON_TIMER_BUTTON 5 // WILL BE USED FOR INCREASE
 #define TEMP_SENSE_PIN 6
+
+#define EEPROM_BRIGHTNESS_ADRESS 0
 #define LDR_ENABLE true
 #define LDR_PIN A0 //TO ADJUST BRIGHTNESS
 #define MAX_BRIGHTNESS 15 //To be used in LDR brightness setting
 #define MIN_BRIGHTNESS 1 //To be used in LDR brightness setting
 #define DEBOUNCE 25
-
-#define EEPROM_BRIGHTNESS_ADRESS 0
+#define RTC_MILLIS true //RTC_Millis requires different initializer.
+/*
+* We can use RTClib chips here
+* RTC_DS1307
+* RTC_DS3231
+* RTC_PCF8523
+* RTC_Millis
+*/
+#define RTC_CHIP RTC_Millis
 
 //Max brightness
 int brightness = 15; 
@@ -69,8 +78,7 @@ DallasTemperature tempSensor(&oneWire);
 // Led Control object to control MAX72XX device
 LedControl lc = LedControl(12, 11, 10, 1);
 //rtc access object
-RTC_DS3231 rtc; //Alternate chips can be used from Adafruit RTClib
-//RTC_Millis rtc; //Can be used but it will roll over after ~48days
+RTC_CHIP rtc;
 
 /*
 * ENUMS *******************************
@@ -147,7 +155,7 @@ int tempReadingInterval = 200;
 long previousTempReading = 0L;
 
 // Start of the timer.
-DateTime timerStart = 0;
+DateTime timerStart;
 
 //Configuration Fields
 //Tags for config states These should be  from below by LedControl Library
@@ -200,41 +208,62 @@ void setup()
   timerButton.attach(BUTTON_TIMER_BUTTON);
   timerButton.interval(DEBOUNCE);
 
-  if(LDR_ENABLE){
+  #ifdef LDR_ENABLE
     pinMode(LDR_PIN, INPUT);
-  }
+  #endif
 
   tempSensor.setResolution(DS18B20_ACCURACY);
 
   Serial.println("Buttons are wired up.");
 
+  /*
+  * DISPLAY *************************************
+  */
   //Chip is disabled at boot need to enable
   lc.shutdown(0, false);
-  if(!LDR_ENABLE){
+  #ifndef LDR_ENABLE
     brightness = EEPROM.read(EEPROM_BRIGHTNESS_ADRESS);
     if(brightness == 0){
       brightness = 8;
     }
     lc.setIntensity(0, brightness);
-  } else {
+  #else 
     updateDisplayBrightness();
-  }
+  #endif
   lc.clearDisplay(0);
 
   Serial.println("Display init.");
-  while(!rtc.begin()){
+
+  /*
+  * RTC *****************************************
+  */
+#ifdef RTC_MILLIS
+  //RTC_Millis requires a date to initialize
+  rtc.begin(DateTime(F(__DATE__), F(__TIME__)));
+#else
+  while (!rtc.begin())
+  {
     Serial.println("There is no RTC chip detected. Try reconnecting in 1000ms");
     delay(1000);
   }
+#endif
 
-  //Some chips has lost power function. DS3231 is one of them.
-  //If the battery has failed this will return true and we can use Flashing DateTime to set.
-  // You may need to remove if for the first flash. My device didnt worked fine until I adjusted it.
-  if (rtc.lostPower())
+  DateTime rtcTime = rtc.now();
+  DateTime compileTime = DateTime(F(__DATE__), F(__TIME__));
+
+  //This is hardly true.
+  //RTC fell behind and bringing it to compile time which is mosly outdated.
+  //Maybe useful for brand new chips
+  if (compileTime.unixtime() > rtcTime.unixtime())
   {
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); //DS3231 has lostPower register
-    Serial.println("Seems like RTC chip lost power time set to flash time.");
+    Serial.println("RTC time is out of date pulling it to the Compile time");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
+  else
+  {
+    Serial.println("RTC time is ahead of Compile time.");
+  }
+
   //To sychorinze minute operations with clock chip
   //We can use minute operations. - not used - sychorinzed with RTC clock
   second = rtc.now().second();
@@ -272,10 +301,9 @@ void FUNC_ON_SECOND()
   {
     FUNC_ON_MINUTE();
   }
-  if (LDR_ENABLE)
-  {
+  #ifdef LDR_ENABLE
     updateDisplayBrightness();
-  }
+  #endif
 }
 
 void FUNC_ON_MINUTE()
@@ -283,6 +311,7 @@ void FUNC_ON_MINUTE()
  second = rtc.now().second(); //We are using internal clock to roughly estimate minute operations but they may be off -not much- we are syncing it here
 }
 
+#ifdef LDR_ENABLE
 void updateDisplayBrightness(){
   int value = map(analogRead(LDR_PIN), 0, 1023, MAX_BRIGHTNESS, MIN_BRIGHTNESS);
   if(value != brightness){
@@ -290,6 +319,7 @@ void updateDisplayBrightness(){
     lc.setIntensity(0, brightness);
   }
 }
+#endif
 
 void readButtons()
 {
