@@ -4,6 +4,7 @@
 #include <Bounce2.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <EEPROM.h>
 
 /*
 * MAX72XX
@@ -19,7 +20,7 @@
 * pin 6 is conected to te Data
 */
 /*
-* DS3131
+* DS3231
 * I2C RTC sensor with accuracy of 1 minute per year
 * SDA to SDA
 * SCL to SCL
@@ -38,7 +39,11 @@
 #define TEMP_SENSE_PIN 6
 #define LDR_ENABLE true
 #define LDR_PIN A0 //TO ADJUST BRIGHTNESS
+#define MAX_BRIGHTNESS 15 //To be used in LDR brightness setting
+#define MIN_BRIGHTNESS 1 //To be used in LDR brightness setting
 #define DEBOUNCE 25
+
+#define EEPROM_BRIGHTNESS_ADRESS 0
 
 //Max brightness
 int brightness = 15; 
@@ -205,7 +210,15 @@ void setup()
 
   //Chip is disabled at boot need to enable
   lc.shutdown(0, false);
-  lc.setIntensity(0, 6);
+  if(!LDR_ENABLE){
+    brightness = EEPROM.read(EEPROM_BRIGHTNESS_ADRESS);
+    if(brightness == 0){
+      brightness = 8;
+    }
+    lc.setIntensity(0, brightness);
+  } else {
+    updateDisplayBrightness();
+  }
   lc.clearDisplay(0);
 
   Serial.println("Display init.");
@@ -261,18 +274,21 @@ void FUNC_ON_SECOND()
   }
   if (LDR_ENABLE)
   {
-    int value = analogRead(LDR_PIN);
-    if (value != brightness)
-    {
-      brightness = value;
-      lc.setIntensity(0, map(value, 0, 1100, 15, 0));
-    }
+    updateDisplayBrightness();
   }
 }
 
 void FUNC_ON_MINUTE()
 {
  second = rtc.now().second(); //We are using internal clock to roughly estimate minute operations but they may be off -not much- we are syncing it here
+}
+
+void updateDisplayBrightness(){
+  int value = map(analogRead(LDR_PIN), 0, 1023, MAX_BRIGHTNESS, MIN_BRIGHTNESS);
+  if(value != brightness){
+    brightness = value;
+    lc.setIntensity(0, brightness);
+  }
 }
 
 void readButtons()
@@ -425,7 +441,10 @@ void writeSet(ActionType type)
       configurationState = ConfigurationState::DISABLED;
       displayState = DisplayState::TIME;
       brightness = configurationBuffer[6];
-      lc.setIntensity(0, configurationBuffer[6]);
+      if(!LDR_ENABLE){
+        lc.setIntensity(0, brightness);
+        EEPROM.update(EEPROM_BRIGHTNESS_ADRESS, brightness);
+      }
       clearDisplayBuffer();
       DateTime endPoint = rtc.now();
 
