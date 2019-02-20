@@ -39,7 +39,7 @@
 #define TEMP_SENSE_PIN 6
 
 #define EEPROM_BRIGHTNESS_ADRESS 0
-#define LDR_ENABLE 0
+#define LDR_ENABLE true
 #define LDR_PIN A0 //TO ADJUST BRIGHTNESS
 #define MAX_BRIGHTNESS 15 //To be used in LDR brightness setting
 #define MIN_BRIGHTNESS 1 //To be used in LDR brightness setting
@@ -62,7 +62,7 @@ Bounce tempButton = Bounce();
 Bounce timerButton = Bounce();
 
 /*
-* TEMPERATUR SET - UP *****************
+* TEMPERATURE SET - UP *****************
 */
 OneWire oneWire(TEMP_SENSE_PIN);
 DallasTemperature tempSensor(&oneWire);
@@ -213,17 +213,22 @@ void setup()
   */
   //Chip is disabled at boot need to enable
   lc.shutdown(0, false);
-  #ifndef LDR_ENABLE
+  if(LDR_ENABLE){
     brightness = EEPROM.read(EEPROM_BRIGHTNESS_ADRESS);
-    if(brightness == 0){
+    Serial.print("Brightness from EEPROM is:");
+    Serial.println(brightness);
+    //First Time boot
+    if(brightness == 255){
+      Serial.println("First boot.");
       brightness = 8;
+      EEPROM.write(EEPROM_BRIGHTNESS_ADRESS, 8);
+    }
+  }
+    else{
+    brightness = 4;
     }
     lc.setIntensity(0, brightness);
-  #else 
-    lc.setIntensity(0, 4);
-  #endif
   lc.clearDisplay(0);
-
   Serial.println("Display init.");
 
   /*
